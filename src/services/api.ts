@@ -7,8 +7,14 @@ export const fetchLanguages = async () => {
     const data = response.data;
     
     // Extract client and server languages from the OpenAPI spec
-    const clientLanguages = data.paths['/gen/clients/{language}'].get.parameters[0].enum;
-    const serverLanguages = data.paths['/gen/servers/{framework}'].get.parameters[0].enum;
+    // The enum property contains the array of available languages
+    const clientLanguages = data.paths['/gen/clients/{language}'].get.parameters.find(
+      param => param.name === 'language'
+    ).enum;
+    
+    const serverLanguages = data.paths['/gen/servers/{framework}'].get.parameters.find(
+      param => param.name === 'framework'
+    ).enum;
     
     return {
       clientLanguages,
@@ -24,7 +30,7 @@ export const fetchLanguages = async () => {
 export const generateClient = async (language: string, spec: any) => {
   try {
     const response = await axios.post(`https://generator.swagger.io/api/gen/clients/${language}`, {
-      spec: spec
+      spec
     });
     return response.data;
   } catch (error) {
@@ -37,7 +43,7 @@ export const generateClient = async (language: string, spec: any) => {
 export const generateServer = async (framework: string, spec: any) => {
   try {
     const response = await axios.post(`https://generator.swagger.io/api/gen/servers/${framework}`, {
-      spec: spec
+      spec
     });
     return response.data;
   } catch (error) {

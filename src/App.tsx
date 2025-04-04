@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Code, FileJson, Server, Download, ExternalLink } from 'lucide-react';
+import { Code, FileJson, Server, Download, ExternalLink, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,10 @@ import { fetchLanguages, generateClient, generateServer } from '@/services/api';
 function App() {
   const [generatorType, setGeneratorType] = useState<'client' | 'server'>('client');
   const [language, setLanguage] = useState<string>('');
-  const [specSource, setSpecSource] = useState<'url' | 'file'>('url');
+  const [specSource, setSpecSource] = useState<'url' | 'file' | 'paste'>('file');
   const [specUrl, setSpecUrl] = useState<string>('');
   const [specFile, setSpecFile] = useState<File | null>(null);
+  const [specJson, setSpecJson] = useState<string>('');
   const [clientLanguages, setClientLanguages] = useState<string[]>([]);
   const [serverLanguages, setServerLanguages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -30,7 +31,13 @@ function App() {
         const { clientLanguages, serverLanguages } = await fetchLanguages();
         setClientLanguages(clientLanguages);
         setServerLanguages(serverLanguages);
+        
+        // Set default language when languages are loaded
+        if (clientLanguages.length > 0) {
+          setLanguage(clientLanguages[0]);
+        }
       } catch (error) {
+        console.error('Error loading languages:', error);
         toast({
           title: "Error",
           description: "Failed to load available languages",
@@ -41,6 +48,17 @@ function App() {
 
     loadLanguages();
   }, [toast]);
+
+  // Reset language when generator type changes
+  useEffect(() => {
+    if (generatorType === 'client' && clientLanguages.length > 0) {
+      setLanguage(clientLanguages[0]);
+    } else if (generatorType === 'server' && serverLanguages.length > 0) {
+      setLanguage(serverLanguages[0]);
+    } else {
+      setLanguage('');
+    }
+  }, [generatorType, clientLanguages, serverLanguages]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -75,16 +93,39 @@ function App() {
           throw new Error('Please enter a valid URL');
         }
         
-        // Fetch the spec from the URL
-        const response = await fetch(specUrl);
-        spec = await response.json();
-      } else {
+        toast({
+          title: "CORS Warning",
+          description: "Direct URL access may be blocked by CORS. Consider downloading the JSON and using file upload instead.",
+          variant: "destructive",
+        });
+        
+        try {
+          // Try to fetch the spec from the URL (may fail due to CORS)
+          const response = await fetch(specUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch from URL: ${response.statusText}`);
+          }
+          spec = await response.json();
+        } catch (error) {
+          throw new Error(`CORS error: Cannot access the URL directly. Please download the JSON file and upload it instead. (${error instanceof Error ? error.message : 'Unknown error'})`);
+        }
+      } else if (specSource === 'file') {
         if (!specFile) {
           throw new Error('Please select a file');
         }
         
         // Read the spec from the file
         spec = await readFileAsJson(specFile);
+      } else if (specSource === 'paste') {
+        if (!specJson.trim()) {
+          throw new Error('Please paste a valid JSON');
+        }
+        
+        try {
+          spec = JSON.parse(specJson);
+        } catch (error) {
+          throw new Error('Invalid JSON format. Please check your input.');
+        }
       }
       
       // Generate code based on the type
@@ -102,6 +143,7 @@ function App() {
         description: `Your ${generatorType} code has been generated successfully.`,
       });
     } catch (error) {
+      console.error('Generation error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "An unknown error occurred",
@@ -149,7 +191,7 @@ function App() {
 
             <div className="space-y-2">
               <Label htmlFor="language">Language / Framework</Label>
-              <Select onValueChange={setLanguage}>
+              <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select language" />
                 </SelectTrigger>
@@ -168,19 +210,12 @@ function App() {
 
             <div className="space-y-2">
               <Label>OpenAPI Specification</Label>
-              <Tabs defaultValue="url" onValueChange={(value) => setSpecSource(value as 'url' | 'file')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="url">URL</TabsTrigger>
+              <Tabs defaultValue="file" onValueChange={(value) => setSpecSource(value as 'url' | 'file' | 'paste')}>
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="file">File Upload</TabsTrigger>
+                  <TabsTrigger value="paste">Paste JSON</TabsTrigger>
+                  <TabsTrigger value="url">URL (CORS Limited)</TabsTrigger>
                 </TabsList>
-                <TabsContent value="url" className="space-y-2">
-                  <Input 
-                    placeholder="https://example.com/api-spec.json" 
-                    value={specUrl}
-                    onChange={(e) => setSpecUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500">Enter the URL of your OpenAPI specification JSON</p>
-                </TabsContent>
                 <TabsContent value="file" className="space-y-2">
                   <div className="grid w-full items-center gap-1.5">
                     <Label htmlFor="openapi-file">Upload OpenAPI JSON</Label>
@@ -194,6 +229,33 @@ function App() {
                       {specFile ? `Selected: ${specFile.name}` : 'Upload your OpenAPI specification JSON file'}
                     </p>
                   </div>
+                </TabsContent>
+                <TabsContent value="paste" className="space-y-2">
+                  <div className="grid w-full items-center gap-1.5">
+                    <Label htmlFor="openapi-json">Paste OpenAPI JSON</Label>
+                    <textarea 
+                      id="openapi-json"
+                      className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      placeholder='{"openapi": "3.0.0", "info": {...}, ...}'
+                      value={specJson}
+                      onChange={(e) => setSpecJson(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500">Paste your OpenAPI specification JSON here</p>
+                  </div>
+                </TabsContent>
+                <TabsContent value="url" className="space-y-2">
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3 flex items-start">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-800">
+                      URL access may be blocked by CORS restrictions. If you encounter errors, please use the file upload or paste JSON options instead.
+                    </p>
+                  </div>
+                  <Input 
+                    placeholder="https://example.com/api-spec.json" 
+                    value={specUrl}
+                    onChange={(e) => setSpecUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500">Enter the URL of your OpenAPI specification JSON</p>
                 </TabsContent>
               </Tabs>
             </div>
@@ -218,7 +280,7 @@ function App() {
       {generatedLink && (
         <Dialog>
           <DialogTrigger asChild>
-            <Button className="mt-4" variant="outline">
+            <Button className="mt-4 bg-green-600 hover:bg-green-700 text-white">
               <Download className="mr-2 h-4 w-4" /> Download Generated Code
             </Button>
           </DialogTrigger>
