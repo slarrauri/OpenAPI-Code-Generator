@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Code, FileJson, Server, Download, ExternalLink, AlertCircle } from 'lucide-react';
+import { Code, FileJson, Server, Download, ExternalLink, AlertCircle, BookOpen, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { fetchLanguages, generateClient, generateServer } from '@/services/api';
+import SwaggerUIViewer from '@/components/SwaggerUIViewer';
 
 function App() {
   const [generatorType, setGeneratorType] = useState<'client' | 'server'>('client');
@@ -23,7 +24,10 @@ function App() {
   const [serverLanguages, setServerLanguages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [generatedLink, setGeneratedLink] = useState<string>('');
+  const [currentSpec, setCurrentSpec] = useState<any>(null);
+  const [showSwaggerUI, setShowSwaggerUI] = useState<boolean>(false);
   const { toast } = useToast();
+  const [hasValidSpec, setHasValidSpec] = useState<boolean>(false);
 
   useEffect(() => {
     const loadLanguages = async () => {
@@ -60,6 +64,19 @@ function App() {
     }
   }, [generatorType, clientLanguages, serverLanguages]);
 
+  // Check if we have a valid spec based on the current input method
+  useEffect(() => {
+    if (specSource === 'file' && specFile) {
+      setHasValidSpec(true);
+    } else if (specSource === 'paste' && specJson.trim()) {
+      setHasValidSpec(true);
+    } else if (specSource === 'url' && specUrl.trim()) {
+      setHasValidSpec(true);
+    } else {
+      setHasValidSpec(false);
+    }
+  }, [specSource, specFile, specJson, specUrl]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setSpecFile(e.target.files[0]);
@@ -82,51 +99,58 @@ function App() {
     });
   };
 
+  const parseSpecification = async (): Promise<any> => {
+    if (specSource === 'url') {
+      if (!specUrl) {
+        throw new Error('Please enter a valid URL');
+      }
+      
+      toast({
+        title: "CORS Warning",
+        description: "Direct URL access may be blocked by CORS. Consider downloading the JSON and using file upload instead.",
+        variant: "destructive",
+      });
+      
+      try {
+        // Try to fetch the spec from the URL (may fail due to CORS)
+        const response = await fetch(specUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch from URL: ${response.statusText}`);
+        }
+        return await response.json();
+      } catch (error) {
+        throw new Error(`CORS error: Cannot access the URL directly. Please download the JSON file and upload it instead. (${error instanceof Error ? error.message : 'Unknown error'})`);
+      }
+    } else if (specSource === 'file') {
+      if (!specFile) {
+        throw new Error('Please select a file');
+      }
+      
+      // Read the spec from the file
+      return await readFileAsJson(specFile);
+    } else if (specSource === 'paste') {
+      if (!specJson.trim()) {
+        throw new Error('Please paste a valid JSON');
+      }
+      
+      try {
+        return JSON.parse(specJson);
+      } catch (error) {
+        throw new Error('Invalid JSON format. Please check your input.');
+      }
+    }
+    
+    throw new Error('No specification provided');
+  };
+
   const handleSubmit = async () => {
     try {
       setIsLoading(true);
       
-      let spec;
+      const spec = await parseSpecification();
       
-      if (specSource === 'url') {
-        if (!specUrl) {
-          throw new Error('Please enter a valid URL');
-        }
-        
-        toast({
-          title: "CORS Warning",
-          description: "Direct URL access may be blocked by CORS. Consider downloading the JSON and using file upload instead.",
-          variant: "destructive",
-        });
-        
-        try {
-          // Try to fetch the spec from the URL (may fail due to CORS)
-          const response = await fetch(specUrl);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch from URL: ${response.statusText}`);
-          }
-          spec = await response.json();
-        } catch (error) {
-          throw new Error(`CORS error: Cannot access the URL directly. Please download the JSON file and upload it instead. (${error instanceof Error ? error.message : 'Unknown error'})`);
-        }
-      } else if (specSource === 'file') {
-        if (!specFile) {
-          throw new Error('Please select a file');
-        }
-        
-        // Read the spec from the file
-        spec = await readFileAsJson(specFile);
-      } else if (specSource === 'paste') {
-        if (!specJson.trim()) {
-          throw new Error('Please paste a valid JSON');
-        }
-        
-        try {
-          spec = JSON.parse(specJson);
-        } catch (error) {
-          throw new Error('Invalid JSON format. Please check your input.');
-        }
-      }
+      // Store the current spec for the Swagger UI viewer
+      setCurrentSpec(spec);
       
       // Generate code based on the type
       let result;
@@ -154,128 +178,196 @@ function App() {
     }
   };
 
+  const viewSwaggerDocs = async () => {
+    try {
+      // Parse the specification if we don't have it yet
+      if (!currentSpec) {
+        const spec = await parseSpecification();
+        setCurrentSpec(spec);
+      }
+      
+      // Show the Swagger UI
+      setShowSwaggerUI(true);
+    } catch (error) {
+      console.error('Error loading Swagger UI:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <Card className="w-full max-w-3xl">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-2">
-            {generatorType === 'client' ? 
-              <FileJson className="h-10 w-10 text-blue-500" /> : 
-              <Server className="h-10 w-10 text-green-500" />
-            }
+      {showSwaggerUI ? (
+        <div className="w-full max-w-5xl bg-white rounded-lg shadow-lg overflow-hidden">
+          <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
+            <h2 className="text-xl font-semibold">OpenAPI Documentation</h2>
+            <Button 
+              variant="ghost" 
+              className="text-white hover:bg-blue-700" 
+              onClick={() => setShowSwaggerUI(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
-          <CardTitle className="text-2xl">OpenAPI Code Generator</CardTitle>
-          <CardDescription>
-            Generate client or server code from your OpenAPI specification
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Generator Type</Label>
-              <RadioGroup 
-                defaultValue="client" 
-                className="flex space-x-4"
-                onValueChange={(value) => setGeneratorType(value as 'client' | 'server')}
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="client" id="client" />
-                  <Label htmlFor="client" className="cursor-pointer">Client</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="server" id="server" />
-                  <Label htmlFor="server" className="cursor-pointer">Server</Label>
-                </div>
-              </RadioGroup>
+          <div className="p-0 swagger-container">
+            {currentSpec && <SwaggerUIViewer spec={currentSpec} />}
+          </div>
+          <div className="bg-gray-100 p-4 flex justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSwaggerUI(false)}
+            >
+              Back to Generator
+            </Button>
+            <Button 
+              onClick={handleSubmit} 
+              disabled={isLoading || !language}
+            >
+              {isLoading ? (
+                <>Generating...</>
+              ) : (
+                <>
+                  Generate {generatorType === 'client' ? 'Client' : 'Server'} <Code className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Card className="w-full max-w-3xl">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-2">
+              {generatorType === 'client' ? 
+                <FileJson className="h-10 w-10 text-blue-500" /> : 
+                <Server className="h-10 w-10 text-green-500" />
+              }
             </div>
+            <CardTitle className="text-2xl">OpenAPI Code Generator</CardTitle>
+            <CardDescription>
+              Generate client or server code from your OpenAPI specification
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label>Generator Type</Label>
+                <RadioGroup 
+                  defaultValue="client" 
+                  className="flex space-x-4"
+                  onValueChange={(value) => setGeneratorType(value as 'client' | 'server')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="client" id="client" />
+                    <Label htmlFor="client" className="cursor-pointer">Client</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="server" id="server" />
+                    <Label htmlFor="server" className="cursor-pointer">Server</Label>
+                  </div>
+                </RadioGroup>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="language">Language / Framework</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {generatorType === 'client' 
-                    ? clientLanguages.map(lang => (
-                        <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                      ))
-                    : serverLanguages.map(lang => (
-                        <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                      ))
-                  }
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="language">Language / Framework</Label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {generatorType === 'client' 
+                      ? clientLanguages.map(lang => (
+                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                        ))
+                      : serverLanguages.map(lang => (
+                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                        ))
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label>OpenAPI Specification</Label>
-              <Tabs defaultValue="file" onValueChange={(value) => setSpecSource(value as 'url' | 'file' | 'paste')}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="file">File Upload</TabsTrigger>
-                  <TabsTrigger value="paste">Paste JSON</TabsTrigger>
-                  <TabsTrigger value="url">URL (CORS Limited)</TabsTrigger>
-                </TabsList>
-                <TabsContent value="file" className="space-y-2">
-                  <div className="grid w-full items-center gap-1.5">
-                    <Label htmlFor="openapi-file">Upload OpenAPI JSON</Label>
+              <div className="space-y-2">
+                <Label>OpenAPI Specification</Label>
+                <Tabs defaultValue="file" onValueChange={(value) => setSpecSource(value as 'url' | 'file' | 'paste')}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="file">File Upload</TabsTrigger>
+                    <TabsTrigger value="paste">Paste JSON</TabsTrigger>
+                    <TabsTrigger value="url">URL (CORS Limited)</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="file" className="space-y-2">
+                    <div className="grid w-full items-center gap-1.5">
+                      <Label htmlFor="openapi-file">Upload OpenAPI JSON</Label>
+                      <Input 
+                        id="openapi-file" 
+                        type="file" 
+                        accept=".json"
+                        onChange={handleFileChange}
+                      />
+                      <p className="text-xs text-gray-500">
+                        {specFile ? `Selected: ${specFile.name}` : 'Upload your OpenAPI specification JSON file'}
+                      </p>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="paste" className="space-y-2">
+                    <div className="grid w-full items-center gap-1.5">
+                      <Label htmlFor="openapi-json">Paste OpenAPI JSON</Label>
+                      <textarea 
+                        id="openapi-json"
+                        className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder='{"openapi": "3.0.0", "info": {...}, ...}'
+                        value={specJson}
+                        onChange={(e) => setSpecJson(e.target.value)}
+                      />
+                      <p className="text-xs text-gray-500">Paste your OpenAPI specification JSON here</p>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="url" className="space-y-2">
+                    <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3 flex items-start">
+                      <AlertCircle className="h-5 w-5 text-amber-500 mr-2 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-amber-800">
+                        URL access may be blocked by CORS restrictions. If you encounter errors, please use the file upload or paste JSON options instead.
+                      </p>
+                    </div>
                     <Input 
-                      id="openapi-file" 
-                      type="file" 
-                      accept=".json"
-                      onChange={handleFileChange}
+                      placeholder="https://example.com/api-spec.json" 
+                      value={specUrl}
+                      onChange={(e) => setSpecUrl(e.target.value)}
                     />
-                    <p className="text-xs text-gray-500">
-                      {specFile ? `Selected: ${specFile.name}` : 'Upload your OpenAPI specification JSON file'}
-                    </p>
-                  </div>
-                </TabsContent>
-                <TabsContent value="paste" className="space-y-2">
-                  <div className="grid w-full items-center gap-1.5">
-                    <Label htmlFor="openapi-json">Paste OpenAPI JSON</Label>
-                    <textarea 
-                      id="openapi-json"
-                      className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      placeholder='{"openapi": "3.0.0", "info": {...}, ...}'
-                      value={specJson}
-                      onChange={(e) => setSpecJson(e.target.value)}
-                    />
-                    <p className="text-xs text-gray-500">Paste your OpenAPI specification JSON here</p>
-                  </div>
-                </TabsContent>
-                <TabsContent value="url" className="space-y-2">
-                  <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3 flex items-start">
-                    <AlertCircle className="h-5 w-5 text-amber-500 mr-2 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-amber-800">
-                      URL access may be blocked by CORS restrictions. If you encounter errors, please use the file upload or paste JSON options instead.
-                    </p>
-                  </div>
-                  <Input 
-                    placeholder="https://example.com/api-spec.json" 
-                    value={specUrl}
-                    onChange={(e) => setSpecUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500">Enter the URL of your OpenAPI specification JSON</p>
-                </TabsContent>
-              </Tabs>
+                    <p className="text-xs text-gray-500">Enter the URL of your OpenAPI specification JSON</p>
+                  </TabsContent>
+                </Tabs>
+              </div>
             </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button variant="outline" onClick={() => window.location.reload()}>
-            Reset
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || !language}>
-            {isLoading ? (
-              <>Generating...</>
-            ) : (
-              <>
-                Generate {generatorType === 'client' ? 'Client' : 'Server'} <Code className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
-        </CardFooter>
-      </Card>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Reset
+            </Button>
+            <div className="flex space-x-2">
+              <Button 
+                variant="outline" 
+                className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+                onClick={viewSwaggerDocs}
+                disabled={!hasValidSpec}
+              >
+                <BookOpen className="mr-2 h-4 w-4" /> View Docs
+              </Button>
+              <Button onClick={handleSubmit} disabled={isLoading || !language || !hasValidSpec}>
+                {isLoading ? (
+                  <>Generating...</>
+                ) : (
+                  <>
+                    Generate {generatorType === 'client' ? 'Client' : 'Server'} <Code className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardFooter>
+        </Card>
+      )}
 
       {generatedLink && (
         <Dialog>

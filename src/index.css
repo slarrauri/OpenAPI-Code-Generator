@@ -74,3 +74,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Swagger UI customizations */
+.swagger-container {
+  height: 70vh;
+  overflow-y: auto;
+}
+
+.swagger-ui .topbar {
+  display: none;
+}
+
+.swagger-ui .info {
+  margin: 20px 0;
+}
+
+.swagger-ui .scheme-container {
+  box-shadow: none;
+  padding-top: 0;
+}
