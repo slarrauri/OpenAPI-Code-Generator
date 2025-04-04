@@ -1,20 +1,18 @@
 openapi: 3.0.3
 info:
   title: Ollama API
-  description: |
-    API for interacting with Ollama models. Ollama allows you to run open-source large language models locally.
-    This specification is based on the official Ollama API documentation.
+  description: API for interacting with Ollama models
   version: 1.0.0
   contact:
     url: https://github.com/ollama/ollama
 servers:
-  - url: https://ai-ollama.mwblxq.easypanel.host
+  - url: http://localhost:11434
     description: Local Ollama server
 paths:
   /api/generate:
     post:
-      summary: Generate a completion for a prompt with a model
-      description: Generate a response for a given prompt with the specified model
+      summary: Generate a completion
+      description: Generate a response for a given prompt with a provided model
       operationId: generate
       requestBody:
         required: true
@@ -47,11 +45,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/chat:
     post:
-      summary: Generate a response from a model given a chat history
-      description: Generate a chat completion for the given chat history with the specified model
+      summary: Chat with a model
+      description: Generate a model response based on a chat history
       operationId: chat
       requestBody:
         required: true
@@ -84,11 +81,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/embeddings:
     post:
-      summary: Generate embeddings for a prompt with a model
-      description: Generate embeddings for the given prompt with the specified model
+      summary: Generate embeddings
+      description: Generate embeddings for a given prompt with a provided model
       operationId: embeddings
       requestBody:
         required: true
@@ -121,10 +117,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/create:
     post:
-      summary: Create a model from a Modelfile
+      summary: Create a model
       description: Create a model from a Modelfile
       operationId: createModel
       requestBody:
@@ -152,11 +147,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/pull:
     post:
-      summary: Pull a model from a registry
-      description: Download a model from a registry to the local library
+      summary: Pull a model
+      description: Download a model from the Ollama library
       operationId: pullModel
       requestBody:
         required: true
@@ -183,11 +177,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/push:
     post:
-      summary: Push a model to a registry
-      description: Upload a model from the library to a registry
+      summary: Push a model
+      description: Upload a model to a model library
       operationId: pushModel
       requestBody:
         required: true
@@ -220,10 +213,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-  /api/list:
-    post:
-      summary: List models in the library
+  /api/tags:
+    get:
+      summary: List models
       description: List all models that are available locally
       operationId: listModels
       responses:
@@ -239,7 +231,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/copy:
     post:
       summary: Copy a model
@@ -276,11 +267,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/delete:
     delete:
       summary: Delete a model
-      description: Remove a model from the library
+      description: Delete a model and its data
       operationId: deleteModel
       requestBody:
         required: true
@@ -313,7 +303,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
   /api/show:
     post:
       summary: Show model information
@@ -350,26 +339,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-  /api/heartbeat:
+  /api/version:
     get:
-      summary: Check if server is running
-      description: Returns a heartbeat response if the server is running
-      operationId: heartbeat
+      summary: Get Ollama version
+      description: Retrieve the Ollama version
+      operationId: getVersion
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HeartbeatResponse'
+                $ref: '#/components/schemas/VersionResponse'
         '500':
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
+  /api/ps:
+    get:
+      summary: List running models
+      description: List models that are currently loaded into memory
+      operationId: listRunningModels
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningModelsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     GenerateRequest:
@@ -381,94 +386,88 @@ components:
         model:
           type: string
           description: The name of the model to use for generation
-          example: llama2
         prompt:
           type: string
           description: The prompt to generate a response for
-          example: Why is the sky blue?
         system:
           type: string
-          description: System prompt to (overrides what is defined in the Modelfile)
-          example: You are a helpful assistant
+          description: >-
+            The system prompt to use (overrides what is defined in the
+            Modelfile)
         template:
           type: string
-          description: Prompt template to use (overrides what is defined in the Modelfile)
+          description: >-
+            The prompt template to use (overrides what is defined in the
+            Modelfile)
         context:
           type: array
           items:
-            type: integer
-          description: The context parameter returned from a previous request to /api/generate, used to keep a short conversational memory
+            type: number
+          description: >-
+            The context to use for generation (overrides what is defined in the
+            Modelfile)
+        stream:
+          type: boolean
+          description: Whether to stream the response
+          default: true
         raw:
           type: boolean
           description: Whether to return the raw response from the model
           default: false
         format:
           type: string
-          description: The format to return a response in
-          enum: [json]
+          description: The format to return the response in
+          enum:
+            - json
         options:
-          $ref: '#/components/schemas/ModelOptions'
-        images:
-          type: array
-          items:
-            type: string
-            format: binary
-          description: List of base64-encoded images to include in the prompt (for multimodal models)
-
+          type: object
+          description: >-
+            Additional model parameters listed in the documentation for the
+            Modelfile such as temperature
+          additionalProperties: true
     GenerateResponse:
       type: object
       properties:
         model:
           type: string
-          description: The model name
-          example: llama2
+          description: The name of the model used for generation
         created_at:
           type: string
           format: date-time
-          description: The time the response was generated
-          example: "2023-11-04T14:54:17.449Z"
+          description: The time the response was created
         response:
           type: string
           description: The generated response
-          example: The sky appears blue because of a phenomenon called Rayleigh scattering.
         done:
           type: boolean
           description: Whether the response is complete
-          example: true
         context:
           type: array
           items:
-            type: integer
-          description: The context parameter to pass to the next request to keep a conversational memory
+            type: number
+          description: The context used for generation
         total_duration:
           type: integer
           format: int64
           description: The total time taken to generate the response in nanoseconds
-          example: 5167869791
         load_duration:
           type: integer
           format: int64
           description: The time taken to load the model in nanoseconds
-          example: 0
         prompt_eval_count:
           type: integer
-          description: Number of tokens in the prompt
-          example: 8
+          description: The number of tokens in the prompt
         prompt_eval_duration:
           type: integer
           format: int64
-          description: Time spent evaluating the prompt in nanoseconds
-          example: 326125875
+          description: The time taken to evaluate the prompt in nanoseconds
         eval_count:
           type: integer
-          description: Number of tokens in the response
-          example: 93
+          description: The number of tokens in the response
         eval_duration:
           type: integer
           format: int64
-          description: Time spent generating the response in nanoseconds
-          example: 4840869791
-
+          description: The time taken to evaluate the response in nanoseconds
     ChatRequest:
       type: object
       required:
@@ -478,35 +477,27 @@ components:
         model:
           type: string
           description: The name of the model to use for chat
-          example: llama2
         messages:
           type: array
           items:
-            $ref: '#/components/schemas/ChatMessage'
-          description: The list of messages in the conversation
+            $ref: '#/components/schemas/Message'
+          description: The messages to use for chat
         stream:
           type: boolean
           description: Whether to stream the response
-          default: false
+          default: true
         format:
           type: string
-          description: The format to return a response in
-          enum: [json]
+          description: The format to return the response in
+          enum:
+            - json
         options:
-          $ref: '#/components/schemas/ModelOptions'
-        template:
-          type: string
-          description: Prompt template to use (overrides what is defined in the Modelfile)
-        system:
-          type: string
-          description: System prompt to (overrides what is defined in the Modelfile)
-          example: You are a helpful assistant
-        keep_alive:
-          type: string
-          description: Controls how long the model will stay loaded into memory after the request completes
-          example: 5m
-
-    ChatMessage:
+          type: object
+          description: >-
+            Additional model parameters listed in the documentation for the
+            Modelfile such as temperature
+          additionalProperties: true
+    Message:
       type: object
       required:
         - role
@@ -514,67 +505,59 @@ components:
       properties:
         role:
           type: string
-          description: The role of the message sender
-          enum: [system, user, assistant]
-          example: user
+          description: The role of the message
+          enum:
+            - system
+            - user
+            - assistant
         content:
           type: string
           description: The content of the message
-          example: Hello, how are you?
         images:
           type: array
           items:
             type: string
-            format: binary
-          description: List of base64-encoded images to include in the message (for multimodal models)
-
+            format: byte
+            description: Base64-encoded image data
+          description: Optional list of base64-encoded images (for multimodal models)
     ChatResponse:
       type: object
       properties:
         model:
           type: string
-          description: The model name
-          example: llama2
+          description: The name of the model used for chat
         created_at:
           type: string
           format: date-time
-          description: The time the response was generated
-          example: "2023-11-04T14:54:17.449Z"
+          description: The time the response was created
         message:
-          $ref: '#/components/schemas/ChatMessage'
+          $ref: '#/components/schemas/Message'
+          description: The generated message
         done:
           type: boolean
           description: Whether the response is complete
-          example: true
         total_duration:
           type: integer
           format: int64
           description: The total time taken to generate the response in nanoseconds
-          example: 5167869791
         load_duration:
           type: integer
           format: int64
           description: The time taken to load the model in nanoseconds
-          example: 0
         prompt_eval_count:
           type: integer
-          description: Number of tokens in the prompt
-          example: 8
+          description: The number of tokens in the prompt
         prompt_eval_duration:
           type: integer
           format: int64
-          description: Time spent evaluating the prompt in nanoseconds
-          example: 326125875
+          description: The time taken to evaluate the prompt in nanoseconds
         eval_count:
           type: integer
-          description: Number of tokens in the response
-          example: 93
+          description: The number of tokens in the response
         eval_duration:
           type: integer
           format: int64
-          description: Time spent generating the response in nanoseconds
-          example: 4840869791
-
+          description: The time taken to evaluate the response in nanoseconds
     EmbeddingsRequest:
       type: object
       required:
@@ -584,18 +567,13 @@ components:
         model:
           type: string
           description: The name of the model to use for embeddings
-          example: llama2
         prompt:
           type: string
           description: The prompt to generate embeddings for
-          example: Why is the sky blue?
         options:
-          $ref: '#/components/schemas/ModelOptions'
-        keep_alive:
-          type: string
-          description: Controls how long the model will stay loaded into memory after the request completes
-          example: 5m
-
+          type: object
+          description: Additional model parameters
+          additionalProperties: true
     EmbeddingsResponse:
       type: object
       properties:
@@ -604,8 +582,7 @@ components:
           items:
             type: number
             format: float
-          description: The embedding vector
-        
+          description: The generated embedding
     CreateRequest:
       type: object
       required:
@@ -614,33 +591,26 @@ components:
       properties:
         name:
           type: string
-          description: The name of the model to create
-          example: my-model
+          description: The name to give the model
         modelfile:
           type: string
           description: The contents of the Modelfile
-          example: "FROM llama2\nSYSTEM You are a helpful assistant"
         stream:
           type: boolean
           description: Whether to stream the response
           default: false
         path:
           type: string
-          description: Path to the model file on the server
-          example: "/path/to/model"
-
+          description: The path to create the model in
     CreateResponse:
       type: object
       properties:
         status:
           type: string
-          description: Status message
-          example: "success"
+          description: The status of the model creation
         error:
           type: string
-          description: Error message if any
-          example: ""
-
+          description: The error message if model creation failed
     PullRequest:
       type: object
       required:
@@ -649,32 +619,31 @@ components:
         name:
           type: string
           description: The name of the model to pull
-          example: llama2
+        insecure:
+          type: boolean
+          description: Whether to allow insecure connections
+          default: false
         stream:
           type: boolean
           description: Whether to stream the response
           default: false
-        insecure:
-          type: boolean
-          description: Allow insecure connections to the library
-          default: false
-
     PullResponse:
       type: object
       properties:
         status:
           type: string
-          description: Status message
-          example: "success"
-        error:
-          type: string
-          description: Error message if any
-          example: ""
+          description: The status of the model pull
         digest:
           type: string
           description: The digest of the model
-          example: "sha256:29fee8e3799"
-
+        total:
+          type: integer
+          format: int64
+          description: The total size of the model in bytes
+        completed:
+          type: integer
+          format: int64
+          description: The amount of the model that has been downloaded in bytes
     PushRequest:
       type: object
       required:
@@ -683,55 +652,82 @@ components:
         name:
           type: string
           description: The name of the model to push
-          example: llama2
+        insecure:
+          type: boolean
+          description: Whether to allow insecure connections
+          default: false
         stream:
           type: boolean
           description: Whether to stream the response
           default: false
-        insecure:
-          type: boolean
-          description: Allow insecure connections to the registry
-          default: false
-
     PushResponse:
       type: object
       properties:
         status:
           type: string
-          description: Status message
-          example: "success"
-        error:
+          description: The status of the model push
+        digest:
           type: string
-          description: Error message if any
-          example: ""
-
+          description: The digest of the model
+        total:
+          type: integer
+          format: int64
+          description: The total size of the model in bytes
+        completed:
+          type: integer
+          format: int64
+          description: The amount of the model that has been uploaded in bytes
     ListResponse:
       type: object
       properties:
         models:
           type: array
           items:
-            $ref: '#/components/schemas/ModelInfo'
-          description: List of available models
-
-    ModelInfo:
+            $ref: '#/components/schemas/Model'
+          description: The list of models
+    Model:
       type: object
       properties:
         name:
           type: string
           description: The name of the model
-          example: llama2
         modified_at:
           type: string
           format: date-time
           description: The time the model was last modified
-          example: "2023-11-04T14:54:17.449Z"
         size:
           type: integer
           format: int64
           description: The size of the model in bytes
-          example: 3791309
-
+        digest:
+          type: string
+          description: The digest of the model
+        details:
+          $ref: '#/components/schemas/ModelDetails'
+          description: Additional details about the model
+    ModelDetails:
+      type: object
+      properties:
+        parent_model:
+          type: string
+          description: The parent model
+        format:
+          type: string
+          description: The format of the model
+        family:
+          type: string
+          description: The family of the model
+        families:
+          type: array
+          items:
+            type: string
+          description: The families of the model
+        parameter_size:
+          type: string
+          description: The parameter size of the model
+        quantization_level:
+          type: string
+          description: The quantization level of the model
     CopyRequest:
       type: object
       required:
@@ -741,20 +737,15 @@ components:
         source:
           type: string
           description: The name of the model to copy from
-          example: llama2
         destination:
           type: string
           description: The name of the model to copy to
-          example: llama2-copy
-
     CopyResponse:
       type: object
       properties:
         status:
           type: string
-          description: Status message
-          example: "success"
-
+          description: The status of the model copy
     DeleteRequest:
       type: object
       required:
@@ -763,16 +754,12 @@ components:
         name:
           type: string
           description: The name of the model to delete
-          example: llama2
-
     DeleteResponse:
       type: object
       properties:
         status:
           type: string
-          description: Status message
-          example: "success"
-
+          description: The status of the model deletion
     ShowRequest:
       type: object
       required:
@@ -781,132 +768,68 @@ components:
         name:
           type: string
           description: The name of the model to show
-          example: llama2
-
     ShowResponse:
       type: object
       properties:
         modelfile:
           type: string
           description: The contents of the Modelfile
-          example: "FROM llama2\nSYSTEM You are a helpful assistant"
         parameters:
           type: string
-          description: The model parameters
-          example: "temperature 0.8"
+          description: The parameters of the model
         template:
           type: string
-          description: The prompt template
-          example: "[INST] {{ .Prompt }} [/INST]"
+          description: The template of the model
         system:
           type: string
-          description: The system prompt
-          example: "You are a helpful assistant"
+          description: The system prompt of the model
         license:
           type: string
           description: The license of the model
-          example: "Apache 2.0"
-
-    HeartbeatResponse:
+    VersionResponse:
       type: object
       properties:
-        heartbeat:
-          type: boolean
-          description: Whether the server is running
-          example: true
-
-    ModelOptions:
+        version:
+          type: string
+          description: The version of Ollama
+    RunningModelsResponse:
       type: object
       properties:
-        temperature:
-          type: number
-          format: float
-          description: The temperature of the model
-          example: 0.8
-        num_ctx:
-          type: integer
-          description: Sets the size of the context window used to generate the next token
-          example: 2048
-        num_predict:
-          type: integer
-          description: Maximum number of tokens to predict
-          example: 128
-        top_k:
-          type: integer
-          description: Reduces the probability of generating nonsense
-          example: 40
-        top_p:
-          type: number
-          format: float
-          description: Works together with top-k
-          example: 0.9
-        tfs_z:
-          type: number
-          format: float
-          description: Tail free sampling is used to reduce the impact of less probable tokens
-          example: 1.0
-        typical_p:
-          type: number
-          format: float
-          description: Locally typical sampling focuses on coherent and consistent generation
-          example: 1.0
-        repeat_penalty:
-          type: number
-          format: float
-          description: Sets how strongly to penalize repetitions
-          example: 1.1
-        repeat_last_n:
-          type: integer
-          description: How far back to look for repetitions
-          example: 64
-        frequency_penalty:
-          type: number
-          format: float
-          description: Positive values penalize tokens that occur in the text so far
-          example: 0.0
-        presence_penalty:
-          type: number
-          format: float
-          description: Positive values penalize tokens that have already appeared in the text
-          example: 0.0
-        mirostat:
-          type: integer
-          description: Enable Mirostat sampling for controlling perplexity
-          enum: [0, 1, 2]
-          example: 0
-        mirostat_tau:
-          type: number
-          format: float
-          description: Controls the balance between coherence and diversity
-          example: 5.0
-        mirostat_eta:
-          type: number
-          format: float
-          description: Learning rate for Mirostat
-          example: 0.1
-        seed:
-          type: integer
-          description: Sets the random number seed to use for generation
-          example: 42
-        stop:
+        models:
           type: array
           items:
-            type: string
-          description: Sets the stop sequences to use
-          example: ["###", "DONE"]
-        num_gpu:
+            $ref: '#/components/schemas/RunningModel'
+          description: The list of running models
+    RunningModel:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the model
+        model:
+          type: string
+          description: The model identifier
+        size:
           type: integer
-          description: The number of layers to put on the GPU
-          example: 50
-        num_thread:
+          format: int64
+          description: The size of the model in bytes
+        digest:
+          type: string
+          description: The digest of the model
+        details:
+          $ref: '#/components/schemas/ModelDetails'
+          description: Additional details about the model
+        expires_at:
+          type: string
+          format: date-time
+          description: The time when the model will be unloaded from memory
+        size_vram:
           type: integer
-          description: Sets the number of threads to use during computation
-          example: 8
-
+          format: int64
+          description: The size of the model in VRAM
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          description: Error message
-          example: "model not found"
+          description: The error message
